@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>MY ASSISTANCE 1000</title>
+    
+
+  </head>
+    
+  <body>
+  <!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>JARVIS</title>
+<style>
+  :root{
+    --bg:#000010; --accent:#00eaff;
+  }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#000010,#001033);font-family:Inter,system-ui,Arial;color:#dff;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  #orb{width:260px;height:260px;border-radius:50%;background:radial-gradient(circle at 30% 25%, rgba(0,234,255,0.14), rgba(0,60,140,0.08)), radial-gradient(circle at 70% 75%, rgba(0,110,255,0.06), transparent);box-shadow:0 0 60px rgba(0,160,255,0.08), inset 0 0 110px rgba(0,160,255,0.05);transition:box-shadow .25s,transform .25s}
+  h1{margin:18px 0 6px;font-weight:600}
+  #status{font-size:13px;color:#9edcff;margin-top:12px}
+  .controls{margin-top:20px;display:flex;gap:10px}
+  button{background:linear-gradient(180deg,#0078ff,#004cff);border:none;color:white;padding:12px 18px;border-radius:10px;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,0.6)}
+  .secondary{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+  .mode-btn{padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--accent);cursor:pointer}
+  .mode-btn.active{background:linear-gradient(90deg,var(--accent),#004dff);color:#021}
+  footer{position:fixed;bottom:10px;font-size:12px;color:#7fbde8}
+</style>
+</head>
+<body>
+
+  <h1>JARVIS</h1>
+
+  <div id="orb" aria-hidden="true"></div>
+
+  <div id="status">
+    Mode: <span id="uiMode">calm</span> • 
+    Listening: <span id="listState">no</span> • 
+    State: <span id="jarvisState">active</span>
+  </div>
+
+  <div class="controls" style="margin-top:14px">
+    <button id="startBtn">ACTIVATE</button>
+    <button class="secondary" id="wakeBtn">Wake</button>
+
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="mode-btn active" data-mode="calm">Calm</button>
+      <button class="mode-btn" data-mode="alert"></button>
+      <button class="mode-btn" data-mode="battle"></button>
+    </div>
+  </div>
+
+  <!-- cleaned -->
+  <footer></footer>
+
+<script>
+/* ============================
+  CONFIG
+============================ */
+const OPENROUTER_KEY = "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";
+
+/* ============================
+  STATE
+============================ */
+const State = {
+  mode: "calm",
+  listening: false,
+  jarvisActive: true,
+  memory: { facts: {} }
+};
+
+/* ============================
+  DOM refs
+============================ */
+const orb = document.getElementById('orb');
+const uiMode = document.getElementById('uiMode');
+const listState = document.getElementById('listState');
+const jarvisStateEl = document.getElementById('jarvisState');
+
+/* ============================
+  MODE CONFIG
+============================ */
+const ModeConfig = {
+  calm:   { pitch: 0.60, rate: 0.96, orbGlow: '0 0 60px #00aaff, inset 0 0 90px #003f7f', intro: 'Standing by, Boss.' },
+  alert:  { pitch: 0.48, rate: 0.88, orbGlow: '0 0 100px #ffb84d, inset 0 0 60px #ff8a00', intro: 'Alert mode activated, Boss.' },
+  battle: { pitch: 0.32, rate: 0.80, orbGlow:'0 0 140px #ff2e6f, inset 0 0 120px #8f002f', intro:'Battle mode engaged, Boss.' }
+};
+
+/* ============================
+  MEMORY
+============================ */
+const MEM_KEY = 'jarvis_voice_memory_v1';
+function loadMemory(){ try{ const raw = localStorage.getItem(MEM_KEY); State.memory = raw?JSON.parse(raw):{facts:{}};}catch(e){State.memory={facts:{}};} }
+function saveMemory(){ localStorage.setItem(MEM_KEY, JSON.stringify(State.memory)); }
+function addMemory(text){ const id='m_'+Date.now(); State.memory.facts[id]=text; saveMemory(); speak('Saved to memory, Boss.'); }
+function recallMemory(q){ const ql=(q||'').toLowerCase(); const matches=Object.values(State.memory.facts).filter(f=>f.toLowerCase().includes(ql)); return matches.length?matches.join('. '):null; }
+function clearMemory(){ State.memory={facts:{}}; saveMemory(); speak('Memory cleared, Boss.'); }
+
+/* ============================
+  SPEECH Synthesis
+============================ */
+function speak(text, opts={prependBoss:true}) {
+  if (!State.jarvisActive) return;
+  const cfg = ModeConfig[State.mode] || ModeConfig.calm;
+  const phrase = (opts.prependBoss === false) ? text : ('Boss, ' + text);
+  const u = new SpeechSynthesisUtterance(phrase);
+  u.lang = 'en-US';
+  u.pitch = cfg.pitch * (opts.pitchFactor || 1);
+  u.rate = cfg.rate * (opts.rateFactor || 1);
+  u.volume = opts.volume || 1.0;
+
+  const voices = window.speechSynthesis.getVoices();
+  if (voices && voices.length) {
+    const deep = voices.find(v=> /male|deep|alloy|en-US/i.test(v.name)) || voices[0];
+    if (deep) u.voice = deep;
+  }
+
+  const prev = orb.style.boxShadow;
+  orb.style.boxShadow = ModeConfig[State.mode].orbGlow;
+  window.speechSynthesis.speak(u);
+  u.onend = () => { orb.style.boxShadow = prev; };
+}
+
+/* ============================
+  STOP / WAKE ENGINE
+============================ */
+function stopSpeaking(){ window.speechSynthesis.cancel(); }
+function enterSilentMode(){
+  State.jarvisActive = false;
+  jarvisStateEl.innerText = 'silent';
+  stopSpeaking();
+  if (recognition) try { recognition.stop(); } catch(e){}
+  State.listening = false; listState.innerText='no';
+  speakImmediateNoCheck("Entering silent standby, Boss.");
+}
+function wakeJarvis(){ 
+  State.jarvisActive = true; 
+  jarvisStateEl.innerText = 'active'; 
+  speak("I am online and listening, Boss."); 
+}
+function speakImmediateNoCheck(msg){
+  const u = new SpeechSynthesisUtterance('Boss, ' + msg);
+  u.lang = 'en-US'; u.pitch = 0.6; u.rate = 0.95; 
+  window.speechSynthesis.speak(u);
+}
+function checkStopCommands(text){
+  if(!text) return false;
+  const t = text.toLowerCase();
+
+  if (/\b(stop|quiet|shut up|stop listening|jarvis stop|be quiet)\b/.test(t)) {
+    enterSilentMode();
+    return true;
+  }
+
+  if (/\b(wake up|wake|jarvis resume|jarvis activate|jarvis online|start listening)\b/.test(t)) {
+    if(!State.jarvisActive) wakeJarvis();
+    if (!State.listening && recognition) {
+      try { recognition.start(); State.listening = true; listState.innerText='yes'; } catch(e){}
+    }
+    return true;
+  }
+  return false;
+}
+
+/* ============================
+  OpenRouter AI call
+============================ */
+async function callOpenRouter(messages){
+  try{
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+OPENROUTER_KEY },
+      body: JSON.stringify({ model:'gpt-4o-mini', messages })
+    });
+    if(!res.ok){ console.error('OpenRouter status', res.status); return null; }
+    const j = await res.json();
+    return j.choices?.[0]?.message?.content || null;
+  }catch(err){ console.error('AI error', err); return null; }
+}
+
+/* ============================
+  DuckDuckGo Fallback
+============================ */
+async function internetSearch(query){
+  try{
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1&no_html=1`;
+    const r = await fetch(url);
+    if(!r.ok) return null;
+    const j = await r.json();
+    if(j.Abstract && j.Abstract.trim()) return j.Abstract;
+    if(Array.isArray(j.RelatedTopics) && j.RelatedTopics.length){
+      return j.RelatedTopics.slice(0,3).map(t=>t.Text || '').filter(Boolean).join('\n');
+    }
+    return null;
+  }catch(e){ console.error('search err',e); return null; }
+}
+
+/* ============================
+  QUERY PROCESSOR
+============================ */
+async function processCommand(textRaw){
+  if(!textRaw) return;
+  if (checkStopCommands(textRaw)) return;
+  if (!State.jarvisActive) return;
+
+  const text = textRaw.trim();
+  const lower = text.toLowerCase();
+
+  const mMatch = lower.match(/(?:set mode to|switch to)\s+(calm|alert|battle)/i);
+  if(mMatch){ const m = mMatch[1]; setMode(m); speak(`${m} mode activated.`); return; }
+
+  if(/^(remember|save)\b/i.test(lower)){
+    const fact = text.replace(/^(remember|save)( that)?\s*/i,'').trim();
+    if(fact){ addMemory(fact); return; }
+  }
+
+  if(/^(recall|what do i know about|what is)\b/i.test(lower)){
+    const q = text.replace(/^(recall|what do i know about|what is)\s*/i,'').trim();
+    const found = recallMemory(q);
+    if(found){ speak(found); } else { speak('No matching memory found, Boss.'); }
+    return;
+  }
+
+  if(/^clear memory$/i.test(lower) || /^erase memory$/i.test(lower)){ clearMemory(); return; }
+
+  if(/^search for /i.test(lower) || /^find /i.test(lower) || /\b(who|what|when|where|how|define|explain)\b/i.test(lower)){
+    const systemPrompt = `You are JARVIS, an ultra-intelligent assistant. Always call the user "Boss". Answer concisely and confidently.`;
+    const ai = await callOpenRouter([{role:'system', content: systemPrompt},{role:'user', content: text}]);
+    if(ai && !/cannot browse|no web access/i.test(ai)){ speak(ai); return; }
+
+    const search = await internetSearch(text);
+    if(search){
+      const summaryPrompt = `You are JARVIS. Summarize the following for: "${text}". Boss wants it concise.\n\n${search}`;
+      const summ = await callOpenRouter([{role:'system', content: systemPrompt},{role:'user', content: summaryPrompt}]);
+      if(summ){ speak(summ); return; } else { speak(search); return; }
+    }
+    if(ai){ speak(ai); } else { speak("I couldn't reach the intelligence core, Boss."); }
+    return;
+  }
+
+  const defaultSystem = `You are JARVIS, an ultra-advanced AI assistant. Always address the user as "Boss". Respond fully and confidently.`;
+  const reply = await callOpenRouter([{role:'system', content: defaultSystem},{role:'user', content: text}]);
+  if(reply){ speak(reply); return; }
+
+  const sr = await internetSearch(text);
+  if(sr){
+    const summ2 = await callOpenRouter([{role:'system', content: defaultSystem},{role:'user', content:`Summarize:\n\n${sr}`}]);
+    if(summ2){ speak(summ2); return; } else { speak(sr); return; }
+  }
+
+  speak("I cannot answer right now, Boss.");
+}
+
+/* ============================
+  SPEECH RECOGNITION
+============================ */
+let recognition = null;
+function makeRecognition(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ speak('Speech recognition unsupported, Boss.'); return null; }
+  const r = new SR();
+  r.lang = 'en-US'; 
+  r.interimResults = false; 
+  r.maxAlternatives = 1; 
+  r.continuous = false;
+
+  r.onresult = async (ev) => {
+    const spoken = ev.results[0][0].transcript;
+    if (checkStopCommands(spoken)) return;
+    if (!State.jarvisActive) return;
+    await processCommand(spoken);
+  };
+
+  r.onerror = (e) => { console.error('rec error', e); if(State.jarvisActive) speak('Audio error, Boss.'); };
+
+  r.onend = () => {
+    if (State.jarvisActive && State.listening) {
+      try { recognition.start(); } catch(e){}
+    }
+  };
+
+  return r;
+}
+
+/* ============================
+  UI + BUTTONS
+============================ */
+function setMode(m){
+  State.mode = m;
+  uiMode.innerText = m;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.mode===m));
+  orb.style.boxShadow = ModeConfig[m].orbGlow;
+  speak(ModeConfig[m].intro);
+}
+
+document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click', ()=> setMode(b.dataset.mode)));
+
+document.getElementById('wakeBtn').addEventListener('click', ()=>{
+  if(!State.jarvisActive) wakeJarvis();
+  if(!State.listening && recognition){
+    try{ recognition.start(); State.listening=true; listState.innerText='yes'; }catch(e){}
+  }
+  speak('Yes, Boss.');
+});
+
+document.getElementById('startBtn').addEventListener('click', async ()=>{
+  if(!recognition) recognition = makeRecognition();
+  try{
+    await navigator.mediaDevices.getUserMedia({audio:true});
+    recognition.start();
+    State.listening = true; listState.innerText='yes';
+    if(!State.jarvisActive) State.jarvisActive = true;
+    jarvisStateEl.innerText = 'active';
+    speak('JARVIS online. I am listening, Boss.');
+  }catch(e){ speak('Microphone permission required, Boss.'); }
+});
+
+/* ============================
+  INIT
+============================ */
+function init(){ loadMemory(); setMode('calm'); window.speechSynthesis.getVoices(); }
+init();
+
+</script>
+</body>
+</html>
+    
+  </body>
+  
+</html>
